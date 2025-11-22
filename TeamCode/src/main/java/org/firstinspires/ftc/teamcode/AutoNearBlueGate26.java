@@ -181,7 +181,7 @@ public class AutoNearBlueGate26 extends LinearOpMode {
 
     // function to shoot 3 artifacts
     private void shootArtifacts() {
-        int waitTimeForTriggerClose = 1000;
+        int waitTimeForTriggerClose = 800;
         int waitTimeForTriggerOpen = 700;
         int rampUpTime = 1000;
         double targetV = motors.launchSpeedNear;
@@ -213,7 +213,7 @@ public class AutoNearBlueGate26 extends LinearOpMode {
         motors.triggerClose();
 
         // starting shoot third one
-        targetV -= 4;
+        targetV -= 2;
         reachTargetVelocity(targetV, waitTimeForTriggerOpen); // waiting time for launcher motor ramp up
         motors.triggerOpen(); // shoot third
         Logging.log("launcher velocity for #3 one: %f.", motors.getLaunchVelocity());

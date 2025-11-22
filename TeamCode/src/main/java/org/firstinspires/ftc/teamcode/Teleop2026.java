@@ -275,6 +275,24 @@ public class Teleop2026 extends LinearOpMode {
                         );
                     }
                 }
+                detectPattern();
+                // run angle adjustment a second time
+                // make sure the april Tag has been detected and need to turn. Bigger than 1 degree
+                // moving according to area if pattern has detected.
+                if ((patternPos.length > 2) && (Math.abs(patternPos[0]) > 0.01)) {
+
+                    double correctAng = patternPos[0] - leftOrRight * 1.0; // 1.0 degree to left.
+                    // moving robot when there is significant difference.
+                    if (Math.abs(correctAng) > 0.5 /* degree*/)
+                    {
+                        TurnConstraints tc = new TurnConstraints(Math.PI/3, -Math.PI/3, Math.PI/3);
+                        Actions.runBlocking(
+                                drive.actionBuilder(drive.localizer.getPose())
+                                        .turn(-Math.toRadians(correctAng), tc)
+                                        .build()
+                        );
+                    }
+                }
             }
 
             // move to near shoot position
