@@ -10,7 +10,7 @@ public class AutoNearBlueGate180Pos26 extends AutoNearBlueGate26 {
     public void setStartPosition() {
         startPose = new Pose2d(
                 (6 * Params.HALF_MAT - Params.CHASSIS_HALF_LENGTH - 1.5), // add additional 0.5 inch according to testing
-                (leftOrRight * (4 * Params.HALF_MAT - Params.CHASSIS_HALF_WIDTH)), Math.toRadians(180.0)
+                (leftOrRight * (4 * Params.HALF_MAT - Params.CHASSIS_HALF_WIDTH -1.0)), Math.toRadians(180.0)
         );
     }
 }

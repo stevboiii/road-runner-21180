@@ -128,6 +128,7 @@ public class AutoNearBlueGate26 extends LinearOpMode {
                     .build();
             Actions.runBlocking(actIntake); // complete pickup artifacts
             Params.currentPose = drive.localizer.getPose(); // save current position
+            motors.stopIntake();
 
             // open gate after pickup first row of artifacts
             if (pickupIndex == 0) {
@@ -140,7 +141,7 @@ public class AutoNearBlueGate26 extends LinearOpMode {
                 Actions.runBlocking(openGateAct); // complete pickup artifacts
                 Params.currentPose = drive.localizer.getPose(); // save current position
 
-                sleep(1000); // let artifacts get off
+                sleep(1300); // let artifacts get off
             }
 
             // only need to go back a little bit for row 2nd and 3rd
@@ -201,7 +202,8 @@ public class AutoNearBlueGate26 extends LinearOpMode {
 
 
         // starting shoot 2nd one
-        targetV -= 5;
+        targetV -= 6;
+        sleep(200);
         motors.startIntake(); // start intake motor to move 3rd artifacts into launcher
         reachTargetVelocity(targetV, waitTimeForTriggerOpen); // waiting time for launcher motor ramp up
         motors.triggerOpen(); // shoot second
@@ -211,7 +213,7 @@ public class AutoNearBlueGate26 extends LinearOpMode {
         motors.triggerClose();
 
         // starting shoot third one
-        targetV -= 5;
+        targetV -= 4;
         reachTargetVelocity(targetV, waitTimeForTriggerOpen); // waiting time for launcher motor ramp up
         motors.triggerOpen(); // shoot third
         Logging.log("launcher velocity for #3 one: %f.", motors.getLaunchVelocity());

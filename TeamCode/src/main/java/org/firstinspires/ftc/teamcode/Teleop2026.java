@@ -263,7 +263,7 @@ public class Teleop2026 extends LinearOpMode {
                 // moving according to area if pattern has detected.
                 if ((patternPos.length > 2) && (Math.abs(patternPos[0]) > 0.01)) {
 
-                    double correctAng = patternPos[0] - 1.0; // 1.0 degree to left. 
+                    double correctAng = patternPos[0] - leftOrRight * 1.0; // 1.0 degree to left.
                     // moving robot when there is significant difference.
                     if (Math.abs(correctAng) > 1.0 /* degree*/)
                     {
@@ -422,7 +422,8 @@ public class Teleop2026 extends LinearOpMode {
         motors.triggerClose(); //close trigger to wait launcher motor speed up after first launching
 
         // start shooting 2nd one
-        launchVelocity -= 5; // reduce a little bit.
+        launchVelocity -= 6; // reduce a little bit.
+        sleep(200);
         motors.startIntake(); // start intake motor to move 3rd artifacts into launcher
         reachTargetVelocity(launchVelocity, waitTimeForTriggerOpen);// waiting time for launcher motor ramp up
         motors.triggerOpen(); // shoot second
@@ -430,7 +431,7 @@ public class Teleop2026 extends LinearOpMode {
         motors.triggerClose();
 
         // start shooting 3rd one
-        launchVelocity -= 5; // reduce a little bit.
+        launchVelocity -= 4; // reduce a little bit.
         reachTargetVelocity(launchVelocity, waitTimeForTriggerOpen); // waiting time for launcher motor ramp up
         motors.triggerOpen();  // shoot third
         checkingVelocityRampDown(waitTimeForTriggerClose);
