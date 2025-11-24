@@ -8,4 +8,9 @@ public class AutoFarBlue2026 extends Autonomous26 {
     public boolean setNearOrFar() {
         return false;
     }
+
+    @Override
+    public int setPickupTimes() {
+        return 3;
+    }
 }

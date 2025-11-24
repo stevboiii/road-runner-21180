@@ -37,6 +37,9 @@ public class Autonomous26 extends LinearOpMode {
     private Pose2d pickupEndPose;
     private double launchVelocity;
 
+    // parking position
+    private Pose2d parkingPose;
+
     @Override
     public void runOpMode() {
         // setup game options
@@ -48,9 +51,6 @@ public class Autonomous26 extends LinearOpMode {
             blueOrRed = 1; // treat all other values as 1 except -1.
         }
 
-        // init positions according to game options before initial MecanumDrive class.
-        setStartAndShootPose(blueOrRed, nearOrFar);
-
         // save options in static variable for Teleop.
         Params.blueOrRed = blueOrRed;
         Params.currentPose = startPose; // save the Position
@@ -58,6 +58,10 @@ public class Autonomous26 extends LinearOpMode {
         // Create hardware objects
         patternDetector = new Colored(hardwareMap);
         motors = new intakeUnit2026(hardwareMap, "launcher", "intake", "triggerServo");
+
+        // init positions according to game options before initial MecanumDrive class.
+        setStartAndShootPose(blueOrRed, nearOrFar);
+
         drive = new MecanumDrive(hardwareMap, startPose);
 
         // init position of trigger
@@ -101,8 +105,7 @@ public class Autonomous26 extends LinearOpMode {
             // set up artifacts pickup start and end positions
 
             // 23 is the closest row to start position, then 22, then 21, so new if statement below will optimize pathing
-            int rowNum = pickupOrder[pickupIndex];
-
+            int rowNum = 1; //pickupOrder[pickupIndex]; // not used pattern during autonomous any more
             setupPickupPositions(blueOrRed, nearOrFar, pickupIndex);
 
             // action for picking up artifacts
@@ -125,7 +128,11 @@ public class Autonomous26 extends LinearOpMode {
                     .build();
             Actions.runBlocking(actIntake); // complete pickup artifacts
             Params.currentPose = drive.localizer.getPose(); // save current position
-            motors.stopIntake();
+
+            if (nearOrFar) {
+                // only stop intake for near auto cases
+                motors.stopIntake();
+            }
 
             // open gate after pickup artifacts only for near autonomous case
             if ((pickupIndex < gateOpenTimes) && nearOrFar) {
@@ -167,14 +174,14 @@ public class Autonomous26 extends LinearOpMode {
 
         // move out of the Triangle and ready for open the gate at the start of Teleop
         Actions.runBlocking(drive.actionBuilder(drive.localizer.getPose())
-                .strafeToLinearHeading(new Vector2d(0, blueOrRed * 3.8 * Params.HALF_MAT), Math.toRadians(180))
+                .strafeToLinearHeading(parkingPose.position, parkingPose.heading)
                 .build());
         Params.currentPose = drive.localizer.getPose(); // save current position
     }
 
     // function to shoot 3 artifacts
     private void shootArtifacts(double launchV) {
-        int waitTimeForTriggerClose = 800;
+        int waitTimeForTriggerClose = 500;
         int waitTimeForTriggerOpen = 700;
         int rampUpTime = 1000;
         double targetV = launchV;
@@ -316,6 +323,8 @@ public class Autonomous26 extends LinearOpMode {
                     Math.atan2(sideOption * (6 * Params.HALF_MAT - Math.abs(shootPosY)),
                     6 * Params.HALF_MAT - shootPosX);
             launchP = new Pose2d(shootPosX, shootPosY, shootH);
+
+            parkingPose = new Pose2d(0, blueOrRed * 3.8 * Params.HALF_MAT, Math.PI);
         }
         else {
             // far autonomous
@@ -329,6 +338,8 @@ public class Autonomous26 extends LinearOpMode {
                     - 4.5 * Params.HALF_MAT,
                     blueOrRed * Params.HALF_MAT,
                     Math.toRadians(motors.launchDegreeFar * blueOrRed));
+
+            parkingPose = new Pose2d(- 5 * Params.HALF_MAT, sideOption * 3 * Params.HALF_MAT, Math.PI);
         }
         startPose = startP;
         launchPose = launchP;
@@ -340,7 +351,7 @@ public class Autonomous26 extends LinearOpMode {
         if (nearFlag) {
             // near autonomous
             pickupS = new Pose2d(
-                    (-index * 2 + 3) * Params.HALF_MAT,
+                    (-index * 2 + 1) * Params.HALF_MAT,
                     sideFlag * (2.6 * Params.HALF_MAT),
                     sideFlag * Math.PI / 2.0);
             pickupE = new Pose2d(pickupS.position.x,
@@ -353,10 +364,10 @@ public class Autonomous26 extends LinearOpMode {
                 case 0:
                     // pickup from human player station
                     pickupS = new Pose2d(
-                            (-5) * Params.HALF_MAT,
-                            sideFlag * (5 * Params.HALF_MAT),
-                            sideFlag * Math.PI / 2.0);
-                    pickupE = new Pose2d(pickupS.position.x - 15.0, // moving 15 inch
+                            (-4.3) * Params.HALF_MAT,
+                            sideFlag * (6 * Params.HALF_MAT - Params.CHASSIS_HALF_LENGTH - 1.0),
+                            sideFlag * Math.PI * 130.0/180); // 130 degree
+                    pickupE = new Pose2d(-6 * Params.HALF_MAT + Params.CHASSIS_HALF_WIDTH, // moving 15 inch
                             pickupS.position.y,
                             pickupS.heading.toDouble());
                     break;
@@ -379,7 +390,7 @@ public class Autonomous26 extends LinearOpMode {
                             sideFlag * (4 * Params.HALF_MAT),
                             sideFlag * Math.PI / 2.0);
                     pickupE = new Pose2d(pickupS.position.x,
-                            pickupS.position.y + sideFlag * (6 * Params.HALF_MAT - Params.CHASSIS_HALF_LENGTH), //moving to the wall
+                            sideFlag * (6 * Params.HALF_MAT - Params.CHASSIS_HALF_LENGTH), //moving to the wall
                             pickupS.heading.toDouble());
                     break;
             }
