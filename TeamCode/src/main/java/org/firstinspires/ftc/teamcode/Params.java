@@ -38,14 +38,10 @@ import com.acmerobotics.roadrunner.Pose2d;
  */
 public class Params {
     // road runner
-    static int leftOrRight = 1;
-
-    static Pose2d currentPose = new Pose2d(0,0,Math.toRadians(180.0 + leftOrRight * 45.0));
+    static int blueOrRed = 1;
+    static Pose2d currentPose = new Pose2d(0,0,Math.toRadians(180.0));
 
     static boolean armCalibrated = false;
-    static int blueOrRed = 1; // 1 for blue, -1 for red
-
-    static int armIntakeCount_InitFront = -30;
 
     //distances for dist sensor
     static double HIGH_CHAMBER_DIST = 6.2; // back distance sensor to chamber when hanging specimen
@@ -59,8 +55,6 @@ public class Params {
     static final double CHASSIS_HALF_WIDTH = 15.0 / 2.0;
     static final double CHASSIS_LENGTH = 15.5;
     static final double CHASSIS_HALF_LENGTH = CHASSIS_LENGTH / 2.0;
-    static final double CHASSIS_START_EXTRA = 3.25;
-
     static final double TELEOP_DISTANCE_TO_TAG = 7.0;
 
     // chassis power factors
@@ -68,15 +62,10 @@ public class Params {
     static final double POWER_NORMAL = 0.80;
     static final double POWER_HIGH = 1.0;
 
-    // drone servo parameters
-    static final double DRONE_START = 0.57;
-
     // X positions for pickup and hang specimen
     static double pickupSpecimenLineupX = - 3.85 * HALF_MAT;
     static double pickupSpecimenX = pickupSpecimenLineupX - 0.2 * HALF_MAT;
     static double hangingSpecimenX = -3.2 * HALF_MAT; // it will be updated during autonomous
 
     static boolean imuReseted = false;
-
-
 }

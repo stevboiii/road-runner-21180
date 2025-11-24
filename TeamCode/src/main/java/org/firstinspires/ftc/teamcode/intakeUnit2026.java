@@ -78,7 +78,6 @@ public class intakeUnit2026
         launcherMotor = hardwareMap.get(DcMotorEx.class, launcher);
 
         // update launcher motor PID for quick ramp up and keep the speed
-
         launcherMotor.setVelocityPIDFCoefficients(p, i, d, f);
 
         /*
@@ -105,7 +104,6 @@ public class intakeUnit2026
     }
 
     public void startLaunchNear() {
-        //launcherMotor.setPower(closePower);
         launcherMotor.setVelocity(launchSpeedNear, AngleUnit.DEGREES);
         Logging.log("start launcher by setting velocity %.2f.", launchSpeedNear);
     }

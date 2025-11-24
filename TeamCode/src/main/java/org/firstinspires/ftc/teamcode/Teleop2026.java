@@ -25,9 +25,6 @@
 
 package org.firstinspires.ftc.teamcode;
 
-import androidx.annotation.NonNull;
-
-import com.acmerobotics.dashboard.telemetry.TelemetryPacket;
 import com.acmerobotics.roadrunner.Pose2d;
 import com.acmerobotics.roadrunner.PoseVelocity2d;
 import com.acmerobotics.roadrunner.TurnConstraints;
@@ -96,7 +93,7 @@ public class Teleop2026 extends LinearOpMode {
         //set shoot position
         Vector2d shootPosNear; // where the robot should shoot
         double shootHeading; //the direction the robot shoot in
-        int leftOrRight = Params.leftOrRight;
+        int leftOrRight = Params.blueOrRed;
         double shootPosX = 1 * Params.HALF_MAT;
         double shootPosY = leftOrRight * Params.HALF_MAT;
         // made the following polarity change to shootHeading calculation
@@ -191,7 +188,7 @@ public class Teleop2026 extends LinearOpMode {
                 int rampUpTime = 700;
                 int waitTimeForTriggerClose = 1000;
                 double launchVelocity = motors.launchSpeedFar;
-                motors.startLauncherFar();
+                motors.setLauncherVelocity(launchVelocity);
                 motors.startIntake();
                 reachTargetVelocity(launchVelocity, rampUpTime);
                 motors.triggerOpen(); // shoot first
@@ -232,13 +229,13 @@ public class Teleop2026 extends LinearOpMode {
             // near shooting
             if (gpButtons.launchArtifacts) {
                 farShoot =false;
-                shootArtifacts(false);
+                shootArtifacts(motors.launchSpeedNear);
             }
 
             // far shooting
             if (gpButtons.launchArtifactsFar) {
                 farShoot = true;
-                shootArtifacts(true);
+                shootArtifacts(motors.launchSpeedNear);
             }
 
             // move to far shoot position
@@ -412,26 +409,15 @@ public class Teleop2026 extends LinearOpMode {
         // The motor stop on their own but power is still applied. Turn off motor.
     }
 
-    public void shootArtifacts(boolean farLaunch) {
+    public void shootArtifacts(double launchV) {
         int waitTimeForTriggerClose = 1000;
         int waitTimeForTriggerOpen = 600;
         int rampUpTime = 800;
-        double launchVelocity = motors.launchSpeedNear;
-        if (farLaunch) {
-            launchVelocity = motors.launchSpeedFar;
-        }
+        double launchVelocity = launchV;
 
         // start launcher motor if it has not been launched
-        if (motors.getLauncherPower() < 0.4) {
-            if (farLaunch) {
-                motors.startLauncherFar(); // far power
-            } else {
-                motors.startLaunchNear(); // near
-            }
-        }
-        // launcher is started but with near launching power
-        else if ((motors.getLaunchVelocity() < motors.launchSpeedFar) && farLaunch) {
-            motors.startLauncherFar();
+        if (motors.getLauncherPower() < launchVelocity * 0.96) {
+            motors.setLauncherVelocity(launchVelocity);
         }
 
         reachTargetVelocity(launchVelocity, rampUpTime);
@@ -441,7 +427,7 @@ public class Teleop2026 extends LinearOpMode {
 
         // start shooting 2nd one
         launchVelocity -= 6; // reduce a little bit.
-        sleep(200);
+        sleepWithDriving(200);
         motors.startIntake(); // start intake motor to move 3rd artifacts into launcher
         reachTargetVelocity(launchVelocity, waitTimeForTriggerOpen);// waiting time for launcher motor ramp up
         motors.triggerOpen(); // shoot second
@@ -471,6 +457,7 @@ public class Teleop2026 extends LinearOpMode {
                     ),
                     -gpButtons.robotTurn * Params.POWER_LOW / 2.0
             ));
+            drive.updatePoseEstimate();
         }
     }
 
@@ -488,11 +475,12 @@ public class Teleop2026 extends LinearOpMode {
             gpButtons.checkGamepadButtons(gamepad1, gamepad2);
             drive.setDrivePowers(new PoseVelocity2d(
                     new Vector2d(
-                            -gpButtons.robotDrive * Params.POWER_LOW / 2.0,
-                            -gpButtons.robotStrafe * Params.POWER_LOW / 2.0
+                            -gpButtons.robotDrive * Params.POWER_LOW / 1.5,
+                            -gpButtons.robotStrafe * Params.POWER_LOW / 1.5
                     ),
-                    -gpButtons.robotTurn * Params.POWER_LOW / 2.0
+                    -gpButtons.robotTurn * Params.POWER_LOW / 1.5
             ));
+            drive.updatePoseEstimate();
         }
     }
 
@@ -513,6 +501,7 @@ public class Teleop2026 extends LinearOpMode {
                     ),
                     -gpButtons.robotTurn * Params.POWER_LOW / 1.5
             ));
+            drive.updatePoseEstimate();
         }
         Logging.log("Total waiting duration = %.2f", runtime.milliseconds() - startTime);
     }

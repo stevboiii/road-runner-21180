@@ -2,16 +2,10 @@ package org.firstinspires.ftc.teamcode;
 
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 
-@Autonomous(name = "Far Blue shoot 2026", group = "Concept")
-public class AutoFarBlue2026 extends AutoFarBluePick26 {
+@Autonomous(name = "Far Blue 3 Pickup", group = "Concept")
+public class AutoFarBlue2026 extends Autonomous26 {
     @Override
-    public void setSide() {
-        leftOrRight = 1;
+    public boolean setNearOrFar() {
+        return false;
     }
-
-    @Override
-    public void setPickupRowNum() {
-        pickRowNum = 0;
-    }
-
 }

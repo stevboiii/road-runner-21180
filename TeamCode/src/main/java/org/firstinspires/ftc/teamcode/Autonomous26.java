@@ -8,66 +8,63 @@ import com.acmerobotics.roadrunner.Pose2d;
 import com.acmerobotics.roadrunner.Vector2d;
 import com.acmerobotics.roadrunner.VelConstraint;
 import com.acmerobotics.roadrunner.ftc.Actions;
-import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
-import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
-@Autonomous(name = "Auto Near Blue Gate Pos45", group = "Concept")
-@Disabled
-public class AutoNearBlueGate26 extends LinearOpMode {
+public class Autonomous26 extends LinearOpMode {
+
+    // Variables which need to be updated for different cases.
+    private int blueOrRed = 1; // 1 for blue, -1 for red
+    private boolean nearOrFar = true; // true for near, false for far
+    private int gateOpenTimes = 1; // how many times to open the gate during autonomous
+    private int pickupTimes = 3; // pickup times during autonomous
+
+
     // get the software-hardware links ready
     private final ElapsedTime runtime = new ElapsedTime();
 
     private MecanumDrive drive;
     private intakeUnit2026 motors;
     private Colored patternDetector;
-    public int leftOrRight; // 1 for blue, -1 for red
-
+    private double detectedPattern = 23; // limelight detected pattern
     private int[] pickupOrder = {1, 2, 3}; // 1: the artifacts row closest to the shooting target
 
-    public void setSide() {
-        leftOrRight = 1;
-    }
-    private double detectedPattern = 23; // limelight detected pattern
+    private Pose2d startPose;
+    private Pose2d launchPose;
 
-    private Vector2d shootPos; // where the robot should shoot
-    private double shootHeading; //the direction the robot shoot in
-
-    public Pose2d startPose;
-
-    public void setStartPosition() {
-        startPose = new Pose2d(
-                (4.76 * Params.HALF_MAT), // add additional 0.5 inch according to testing
-                (leftOrRight * 3.9 * Params.HALF_MAT), Math.toRadians(180.0 + leftOrRight * 45.0)
-        );
-    }
+    // launching positions and speed
+    private Pose2d pickupPose;
+    private Pose2d pickupEndPose;
+    private double launchVelocity;
 
     @Override
     public void runOpMode() {
-        setSide();
-        setStartPosition();
-        Params.leftOrRight = leftOrRight;
+        // setup game options
+        blueOrRed = setSide();
+        nearOrFar = setNearOrFar();
+        pickupTimes = setPickupTimes();
+        gateOpenTimes = setGateOpenTimes();
+        if (blueOrRed != -1) {
+            blueOrRed = 1; // treat all other values as 1 except -1.
+        }
 
-        // connect the hardware map to color discrimination system and prepare launcher, intake, and trigger
-        patternDetector = new Colored(hardwareMap);
-        motors = new intakeUnit2026(hardwareMap, "launcher", "intake", "triggerServo");
+        // init positions according to game options before initial MecanumDrive class.
+        setStartAndShootPose(blueOrRed, nearOrFar);
 
+        // save options in static variable for Teleop.
+        Params.blueOrRed = blueOrRed;
         Params.currentPose = startPose; // save the Position
 
-        // define shoot position at (HALF_MAT, HALF_MAT), (HALF_MAT, -HALF_MAT), calculate shoot angle based on location x, y
-        double shootPosX = 1 * Params.HALF_MAT + 2.0;
-        double shootPosY = leftOrRight * (Params.HALF_MAT + 2.0);
-        // made the following polarity change to shootHeading calculation
-        shootHeading = Math.toRadians(180.0) + Math.atan2(leftOrRight * (6 * Params.HALF_MAT - Math.abs(shootPosY)), 6 * Params.HALF_MAT - shootPosX);
-        shootPos = new Vector2d(shootPosX, shootPosY);
-
-        // set up driving system
+        // Create hardware objects
+        patternDetector = new Colored(hardwareMap);
+        motors = new intakeUnit2026(hardwareMap, "launcher", "intake", "triggerServo");
         drive = new MecanumDrive(hardwareMap, startPose);
 
         // init position of trigger
         motors.triggerClose();
+        launchVelocity = nearOrFar? motors.launchSpeedNear : motors.launchSpeedFar;
 
+        // waiting until press the button to start autonomous.
         waitForStart();
         runtime.reset();
 
@@ -82,15 +79,15 @@ public class AutoNearBlueGate26 extends LinearOpMode {
         // Run the first leg of the path: move to shooting position while detecting pattern
         Actions.runBlocking(drive.actionBuilder(drive.localizer.getPose())
                 //.afterDisp(3 * Params.HALF_MAT, new limeLightCamera()) // start limelight detection after moving 3 half mats
-                //.strafeToConstantHeading(shootPos) // move to shooting position
+                //.strafeToConstantHeading(launchPose.position) // move to shooting position
                 .afterTime(0.5, new startLauncherAction()) // start launcher motor
-                //.turnTo(shootHeading) // turn to shooting direction
-                .strafeToLinearHeading(shootPos, shootHeading)
+                //.turnTo(launchPose.heading) // turn to shooting direction
+                .strafeToLinearHeading(launchPose.position, launchPose.heading)
                 .build());
         Params.currentPose = drive.localizer.getPose(); // save current position
 
         // shoot preload artifacts
-        shootArtifacts();
+        shootArtifacts(launchVelocity);
 
         // the following is a velocity constraint for moving to pick up artifacts
         VelConstraint pickupSpeed = (robotPose, _path, _disp) -> 9.0;
@@ -98,22 +95,20 @@ public class AutoNearBlueGate26 extends LinearOpMode {
         //setupPickupOrder((int)detectedPattern);
 
         // Loop to go through all 3 rows to pick up artifacts and shoot them
-        for (int pickupIndex = 0; pickupIndex < 3; pickupIndex++) {
+        for (int pickupIndex = 0; pickupIndex < pickupTimes; pickupIndex++) {
             Params.currentPose = drive.localizer.getPose(); // save current position
 
-            Vector2d pickupPos;
-            Vector2d pickupEndPos;
+            // set up artifacts pickup start and end positions
+
             // 23 is the closest row to start position, then 22, then 21, so new if statement below will optimize pathing
             int rowNum = pickupOrder[pickupIndex];
 
-            pickupPos = rowChoose(rowNum);
-            // fixed polarity below (there was a double negative sign before)
-            pickupEndPos = new Vector2d(pickupPos.x, pickupPos.y + 17.0 * leftOrRight);
+            setupPickupPositions(blueOrRed, nearOrFar, pickupIndex);
 
             // action for picking up artifacts
             Action actMoveToPickup = drive.actionBuilder(drive.localizer.getPose())
                     // add 4 degree more for row1 according to test results
-                    .strafeToLinearHeading(pickupPos, Math.toRadians(90.0 * leftOrRight))
+                    .strafeToLinearHeading(pickupPose.position, pickupPose.heading.toDouble())
                     .build();
             Actions.runBlocking(actMoveToPickup); // ready for pickup artifacts
             Params.currentPose = drive.localizer.getPose(); // save current position
@@ -123,74 +118,72 @@ public class AutoNearBlueGate26 extends LinearOpMode {
 
             // starting intake motor
             motors.startIntake();
+
+            // moving to pickup end position during intake
             Action actIntake = drive.actionBuilder(drive.localizer.getPose())
-                    .strafeToConstantHeading(pickupEndPos, pickupSpeed) // picking up artifacts
+                    .strafeToConstantHeading(pickupEndPose.position, pickupSpeed) // picking up artifacts
                     .build();
             Actions.runBlocking(actIntake); // complete pickup artifacts
             Params.currentPose = drive.localizer.getPose(); // save current position
             motors.stopIntake();
 
-            // open gate after pickup first row of artifacts
-            if (pickupIndex == 0) {
+            // open gate after pickup artifacts only for near autonomous case
+            if ((pickupIndex < gateOpenTimes) && nearOrFar) {
                 Vector2d gatePose1 = new Vector2d(5.0, drive.localizer.getPose().position.y);
-                Vector2d gatePose2 = new Vector2d(gatePose1.x, gatePose1.y + leftOrRight * 9.0);
+                Vector2d gatePose2 = new Vector2d(gatePose1.x, gatePose1.y + blueOrRed * 9.0);
                 Action openGateAct = drive.actionBuilder(drive.localizer.getPose())
                         .strafeToConstantHeading(gatePose1) // move to the gate
                         .strafeToConstantHeading(gatePose2) // open the gate
                         .build();
                 Actions.runBlocking(openGateAct); // complete pickup artifacts
                 Params.currentPose = drive.localizer.getPose(); // save current position
-
-                sleep(1300); // let artifacts get off
+                sleep(1300); // let artifacts get off enough for 6 balls rolling out
             }
 
-            // only need to go back a little bit for row 2nd and 3rd
+            // only need to go back a little bit for row 2nd and 3rd if the 1st row is still on mat.
             if ((pickupIndex < 2) && (rowNum > pickupOrder[pickupIndex + 1])) {
                 // after pickup, need to go back a bit to avoid obstacles from other rows
                 Action actMoveBack;
                 actMoveBack = drive.actionBuilder(drive.localizer.getPose())
-                        .strafeToConstantHeading(pickupPos)
+                        .strafeToConstantHeading(pickupPose.position)
                         .build();
                 Actions.runBlocking(actMoveBack);
                 Params.currentPose = drive.localizer.getPose(); // save current position
-
             }
 
+            // moving to launching position
             Action actMoveToLaunch = drive.actionBuilder(drive.localizer.getPose())
                     .afterTime(0.3, new startLauncherAction()) // start launcher motor
-                    .strafeToLinearHeading(shootPos, shootHeading)
+                    .strafeToLinearHeading(launchPose.position, launchPose.heading)
                     .build();
             Actions.runBlocking(actMoveToLaunch);
             Params.currentPose = drive.localizer.getPose(); // save current position
 
-
-            // shoot picked up artifacts
-            shootArtifacts();
+            // start to launch artifacts
+            shootArtifacts(launchVelocity);
         }
-
         // stop launcher before parking
         motors.stopLauncher();
 
-        // move out of the Triangle
+        // move out of the Triangle and ready for open the gate at the start of Teleop
         Actions.runBlocking(drive.actionBuilder(drive.localizer.getPose())
-                .strafeToLinearHeading(new Vector2d(0, leftOrRight*3.8*Params.HALF_MAT), Math.toRadians(180))
+                .strafeToLinearHeading(new Vector2d(0, blueOrRed * 3.8 * Params.HALF_MAT), Math.toRadians(180))
                 .build());
         Params.currentPose = drive.localizer.getPose(); // save current position
-
     }
 
     // function to shoot 3 artifacts
-    private void shootArtifacts() {
+    private void shootArtifacts(double launchV) {
         int waitTimeForTriggerClose = 800;
         int waitTimeForTriggerOpen = 700;
         int rampUpTime = 1000;
-        double targetV = motors.launchSpeedNear;
+        double targetV = launchV;
 
         Logging.log("start shooting.");
         // start launcher motor if it has not been launched
-        if (motors.getLauncherPower() < 0.4) {
+        if (motors.getLauncherPower() < targetV * 0.96) {
             Logging.log("start launcher motor since it is stopped.");
-            motors.startLaunchNear();
+            motors.setLauncherVelocity(targetV);
             reachTargetVelocity(targetV, rampUpTime); // waiting time for launcher motor ramp up
         }
 
@@ -203,7 +196,7 @@ public class AutoNearBlueGate26 extends LinearOpMode {
 
         // starting shoot 2nd one
         targetV -= 6;
-        sleep(200);
+        recordVelocity(200); // start intake 200 ms after 1st launching.
         motors.startIntake(); // start intake motor to move 3rd artifacts into launcher
         reachTargetVelocity(targetV, waitTimeForTriggerOpen); // waiting time for launcher motor ramp up
         motors.triggerOpen(); // shoot second
@@ -217,14 +210,14 @@ public class AutoNearBlueGate26 extends LinearOpMode {
         reachTargetVelocity(targetV, waitTimeForTriggerOpen); // waiting time for launcher motor ramp up
         motors.triggerOpen(); // shoot third
         Logging.log("launcher velocity for #3 one: %f.", motors.getLaunchVelocity());
-        velocityRampDown(targetV, waitTimeForTriggerClose + waitTimeForTriggerOpen); // waiting more time for the third one.
+        velocityRampDown(targetV, waitTimeForTriggerClose); // waiting more time for the third one.
     }
 
     // function that chooses the right row based on detected pattern, returns a Vector2d
     private Vector2d rowChoose(double rownumber) {
         return new Vector2d(
                 (-rownumber * 2 + 3) * Params.HALF_MAT, // add additional inch according to testing.
-                leftOrRight * (2.6 * Params.HALF_MAT)
+                blueOrRed * (2.6 * Params.HALF_MAT)
         );
     }
 
@@ -253,7 +246,7 @@ public class AutoNearBlueGate26 extends LinearOpMode {
         @Override
         public boolean run(@NonNull TelemetryPacket telemetryPacket) {
             Logging.log("start launcher motor.");
-            motors.startLaunchNear();
+            motors.setLauncherVelocity(launchVelocity);
             return false;
         }
     }
@@ -304,22 +297,115 @@ public class AutoNearBlueGate26 extends LinearOpMode {
         Logging.log(" #### Total ramp up duration = %.2f", runtime.milliseconds() - startTime);
     }
 
-    // For future use when we have an artifact sorter mechanism
-    //    private void sortArtifacts(int pattern) {
-    //        switch (pattern) {
-    //            case 21:
-    //                telemetry.addLine("Sorting: GPP");
-    //                break;
-    //            case 22:
-    //                telemetry.addLine("Sorting: PGP");
-    //                break;
-    //            case 23:
-    //                telemetry.addLine("Sorting: PPG");
-    //                break;
-    //            default:
-    //                telemetry.addLine("Sorting: Unknown");
-    //                break;
-    //        }
-    //        telemetry.update();
-    //    }
+
+    private void setStartAndShootPose(int sideOption, boolean startOption) {
+        Pose2d startP;
+        Pose2d launchP;
+        if (startOption) {
+            // near autonomous
+            startP = new Pose2d(
+                    (6 * Params.HALF_MAT - Params.CHASSIS_HALF_LENGTH - 1.5), // add additional 0.5 inch according to testing
+                    (sideOption * (4 * Params.HALF_MAT - Params.CHASSIS_HALF_WIDTH - 1.0)), Math.toRadians(180.0)
+            );
+
+            // define shoot position, calculate shoot angle based on location x, y
+            double shootPosX = 1 * Params.HALF_MAT + 2.0;
+            double shootPosY = sideOption * (Params.HALF_MAT + 2.0);
+            // made the following polarity change to shoot Heading calculation
+            double shootH = Math.PI +
+                    Math.atan2(sideOption * (6 * Params.HALF_MAT - Math.abs(shootPosY)),
+                    6 * Params.HALF_MAT - shootPosX);
+            launchP = new Pose2d(shootPosX, shootPosY, shootH);
+        }
+        else {
+            // far autonomous
+            startP = new Pose2d(
+                    (-6 * Params.HALF_MAT + Params.CHASSIS_HALF_LENGTH),
+                    (blueOrRed * Params.CHASSIS_HALF_WIDTH),
+                    Math.toRadians(-180)
+            );
+
+            launchP = new Pose2d(
+                    - 4.5 * Params.HALF_MAT,
+                    blueOrRed * Params.HALF_MAT,
+                    Math.toRadians(motors.launchDegreeFar * blueOrRed));
+        }
+        startPose = startP;
+        launchPose = launchP;
+    }
+
+    private void setupPickupPositions(int sideFlag, boolean nearFlag, int index) {
+        Pose2d pickupS;
+        Pose2d pickupE;
+        if (nearFlag) {
+            // near autonomous
+            pickupS = new Pose2d(
+                    (-index * 2 + 3) * Params.HALF_MAT,
+                    sideFlag * (2.6 * Params.HALF_MAT),
+                    sideFlag * Math.PI / 2.0);
+            pickupE = new Pose2d(pickupS.position.x,
+                    pickupS.position.y + 17.0 * sideFlag, //moving 17.0 inch in Y direction
+                    pickupS.heading.toDouble());
+        }
+        else {
+            // far autonomous
+            switch (index) {
+                case 0:
+                    // pickup from human player station
+                    pickupS = new Pose2d(
+                            (-5) * Params.HALF_MAT,
+                            sideFlag * (5 * Params.HALF_MAT),
+                            sideFlag * Math.PI / 2.0);
+                    pickupE = new Pose2d(pickupS.position.x - 15.0, // moving 15 inch
+                            pickupS.position.y,
+                            pickupS.heading.toDouble());
+                    break;
+                case 1:
+                    // only pickup the 3rd row for far auto
+                    pickupS = new Pose2d(
+                            (-3) * Params.HALF_MAT,
+                            sideFlag * (2.6 * Params.HALF_MAT),
+                            sideFlag * Math.PI / 2.0);
+                    pickupE = new Pose2d(pickupS.position.x,
+                            pickupS.position.y + 17.0 * sideFlag, // moving 17.0 inch in Y direction
+                            pickupS.heading.toDouble());
+                    break;
+                case 2:
+                case 3:
+                default:
+                    // pickup rolling down artifacts according to limelight detected positions
+                    pickupS = new Pose2d(
+                            (-5) * Params.HALF_MAT,
+                            sideFlag * (4 * Params.HALF_MAT),
+                            sideFlag * Math.PI / 2.0);
+                    pickupE = new Pose2d(pickupS.position.x,
+                            pickupS.position.y + sideFlag * (6 * Params.HALF_MAT - Params.CHASSIS_HALF_LENGTH), //moving to the wall
+                            pickupS.heading.toDouble());
+                    break;
+            }
+        }
+        pickupPose = pickupS;
+        pickupEndPose = pickupE;
+    }
+
+
+    /*
+    set blue ot red options. 1 for blue and -1 for red. Other values are all treat as 1(blue).
+     */
+    public int setSide() {
+        return 1;
+    }
+
+    public boolean setNearOrFar() {
+        return true;
+    }
+
+    public int setGateOpenTimes() {
+        return 1;
+    }
+
+    public int setPickupTimes() {
+        return 3;
+    }
+
 }
