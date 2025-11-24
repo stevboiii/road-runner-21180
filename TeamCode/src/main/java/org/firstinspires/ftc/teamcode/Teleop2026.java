@@ -64,36 +64,33 @@ public class Teleop2026 extends LinearOpMode {
     private final ElapsedTime runtime = new ElapsedTime();
 
     // chassis
-    MecanumDrive drive;
-
+    private MecanumDrive drive;
     // initialize limelight
     private Colored patternDetector;
-
-    double[] patternPos;
-
     //claw and arm unit
     private intakeUnit2026 motors;
+    private GamePadButtons2026 gpButtons;
 
+    double[] patternPos;
     boolean farShoot = false;
     boolean debugFlag = true;
-    GamePadButtons2026 gpButtons = new GamePadButtons2026();
+    int leftOrRight;
 
     @Override
     public void runOpMode() {
         telemetry.addData("Status", "Initialized");
-
-        patternDetector = new Colored(hardwareMap);
-
-        drive = new MecanumDrive(hardwareMap, Params.currentPose);
         Logging.log("param.currentPose heading = %s", Params.currentPose.heading.log());
 
+        patternDetector = new Colored(hardwareMap);
+        drive = new MecanumDrive(hardwareMap, Params.currentPose);
         //drive.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
         motors = new intakeUnit2026(hardwareMap, "launcher", "intake", "triggerServo");
+        gpButtons = new GamePadButtons2026();
+        leftOrRight = Params.blueOrRed;
 
         //set shoot position
         Vector2d shootPosNear; // where the robot should shoot
         double shootHeading; //the direction the robot shoot in
-        int leftOrRight = Params.blueOrRed;
         double shootPosX = 1 * Params.HALF_MAT;
         double shootPosY = leftOrRight * Params.HALF_MAT;
         // made the following polarity change to shootHeading calculation
@@ -167,7 +164,6 @@ public class Teleop2026 extends LinearOpMode {
                 motors.stopLauncher();
             }
 
-            // in case there are 4 artifacts on robot.
             // shoot one out
             if (gpButtons.launchOneNear) {
                 farShoot = false;
@@ -196,7 +192,7 @@ public class Teleop2026 extends LinearOpMode {
                 motors.triggerClose();
             }
 
-            // shoot one out for Far launching
+            // dump one out in case there are 4 artifacts on robot
             if (gpButtons.dumpOne) {
                 int rampUpTime = 400;
                 int waitTimeForTriggerClose = 400;
@@ -238,7 +234,7 @@ public class Teleop2026 extends LinearOpMode {
                 shootArtifacts(motors.launchSpeedNear);
             }
 
-            // move to far shoot position
+            // move to far shoot position by RR
             if (gpButtons.alignShootPosFar) {
                 farShoot = true;
 
@@ -254,45 +250,9 @@ public class Teleop2026 extends LinearOpMode {
                                     .build()
                     );
                 }
-
-                detectPattern();
-                // make sure the april Tag has been detected and need to turn. Bigger than 1 degree
-                // moving according to area if pattern has detected.
-                if ((patternPos.length > 2) && (Math.abs(patternPos[0]) > 0.01)) {
-
-                    double correctAng = patternPos[0] - leftOrRight * 1.0; // 1.0 degree to left.
-                    // moving robot when there is significant difference.
-                    if (Math.abs(correctAng) > 1.0 /* degree*/)
-                    {
-                        TurnConstraints tc = new TurnConstraints(Math.PI/2, -Math.PI/2, Math.PI/2);
-                        Actions.runBlocking(
-                                drive.actionBuilder(drive.localizer.getPose())
-                                        .turn(-Math.toRadians(correctAng), tc)
-                                        .build()
-                        );
-                    }
-                }
-                detectPattern();
-                // run angle adjustment a second time
-                // make sure the april Tag has been detected and need to turn. Bigger than 1 degree
-                // moving according to area if pattern has detected.
-                if ((patternPos.length > 2) && (Math.abs(patternPos[0]) > 0.01)) {
-
-                    double correctAng = patternPos[0] - leftOrRight * 1.0; // 1.0 degree to left.
-                    // moving robot when there is significant difference.
-                    if (Math.abs(correctAng) > 0.5 /* degree*/)
-                    {
-                        TurnConstraints tc = new TurnConstraints(Math.PI/3, -Math.PI/3, Math.PI/3);
-                        Actions.runBlocking(
-                                drive.actionBuilder(drive.localizer.getPose())
-                                        .turn(-Math.toRadians(correctAng), tc)
-                                        .build()
-                        );
-                    }
-                }
             }
 
-            // move to near shoot position
+            // move to near shoot position by RR
             if (gpButtons.alignShootPosNear) {
                 farShoot = false;
                 Pose2d locP = drive.localizer.getPose();
@@ -306,30 +266,6 @@ public class Teleop2026 extends LinearOpMode {
                                     .strafeToLinearHeading(shootPosNear, shootHeading)
                                     .build()
                     );
-                }
-
-                detectPattern();
-                // make sure the april Tag has been detected and need to turn. Bigger than 1 degree
-                // moving according to area if pattern has detected.
-                if ((patternPos.length > 2) && (Math.abs(patternPos[2]) > 0.001)) {
-                    double distance = 3000 * (0.013 - patternPos[2]);
-                    Vector2d locP1 = drive.localizer.getPose().position;
-                    double headingAng = drive.localizer.getPose().heading.toDouble();
-                    double newPosX = locP1.x - distance * Math.cos(headingAng);
-                    double newPosY = locP1.y - distance * Math.sin(headingAng);
-
-                    // moving robot when there is significant difference.
-                    if ((Math.abs(distance) > 2.0 /* inch */) || (Math.abs(patternPos[0]) > 2.0 /* degree*/)) {
-                        VelConstraint correctSpeed = (robotPose, _path, _disp) -> 30.0;
-
-                        Actions.runBlocking(
-                                drive.actionBuilder(drive.localizer.getPose())
-                                        .strafeToLinearHeading(
-                                                new Vector2d(newPosX, newPosY),
-                                                headingAng + Math.toRadians(-patternPos[0]), correctSpeed)
-                                        .build()
-                        );
-                    }
                 }
             }
 
@@ -420,6 +356,17 @@ public class Teleop2026 extends LinearOpMode {
             motors.setLauncherVelocity(launchVelocity);
         }
 
+        // correct heading according to limelight feedback
+        if (launchV == motors.launchSpeedNear) {
+            //  it is near launching
+            nearAprilTagTracking();
+        }
+        else {
+            //  it is far launching
+            farAprilTagTracking();
+        }
+
+        // waiting motor speed to ramp up
         reachTargetVelocity(launchVelocity, rampUpTime);
         motors.triggerOpen(); // shoot first
         checkingVelocityRampDown(waitTimeForTriggerClose);
@@ -506,7 +453,7 @@ public class Teleop2026 extends LinearOpMode {
         Logging.log("Total waiting duration = %.2f", runtime.milliseconds() - startTime);
     }
 
-    public void detectPattern() {
+    private void detectPattern() {
         patternPos = patternDetector.returnPosition();
         for (int i = 0; i < 30; i++) { // check for 30 cycles (~30 milliseconds) to detect pattern
             patternPos = patternDetector.returnPosition();
@@ -518,6 +465,73 @@ public class Teleop2026 extends LinearOpMode {
                 return; // return when detected.
             }
             sleep(1);
+        }
+    }
+
+    private void nearAprilTagTracking() {
+        detectPattern();
+        // make sure the april Tag has been detected and need to turn. Bigger than 1 degree
+        // moving according to area if pattern has detected.
+        if ((patternPos.length > 2) && (Math.abs(patternPos[2]) > 0.001)) {
+            double distance = 3000 * (0.013 - patternPos[2]);
+            Vector2d locP1 = drive.localizer.getPose().position;
+            double headingAng = drive.localizer.getPose().heading.toDouble();
+            double newPosX = locP1.x - distance * Math.cos(headingAng);
+            double newPosY = locP1.y - distance * Math.sin(headingAng);
+
+            // moving robot when there is significant difference.
+            if ((Math.abs(distance) > 2.0 /* inch */) || (Math.abs(patternPos[0]) > 2.0 /* degree*/)) {
+                // slow down for more accurate position
+                VelConstraint correctSpeed = (robotPose, _path, _disp) -> 30.0;
+
+                Actions.runBlocking(
+                        drive.actionBuilder(drive.localizer.getPose())
+                                .strafeToLinearHeading(
+                                        new Vector2d(newPosX, newPosY),
+                                        headingAng + Math.toRadians(-patternPos[0]), correctSpeed)
+                                .build()
+                );
+            }
+        }
+    }
+
+    private void farAprilTagTracking() {
+        detectPattern();
+        // make sure the april Tag has been detected and need to turn. Bigger than 1 degree
+        // moving according to area if pattern has detected.
+        if ((patternPos.length > 2) && (Math.abs(patternPos[0]) > 0.01)) {
+
+            double correctAng = patternPos[0] - leftOrRight * 1.0; // 1.0 degree to left.
+            // moving robot when there is significant difference.
+            if (Math.abs(correctAng) > 0.5 /* degree*/)
+            {
+                TurnConstraints tc = new TurnConstraints(Math.PI/2, -Math.PI/2, Math.PI/2);
+                Actions.runBlocking(
+                        drive.actionBuilder(drive.localizer.getPose())
+                                .turn(-Math.toRadians(correctAng), tc)
+                                .build()
+                );
+            }
+        }
+
+        // correct two times for more accurate.
+        detectPattern();
+        // run angle adjustment a second time
+        // make sure the april Tag has been detected and need to turn. Bigger than 1 degree
+        // moving according to area if pattern has detected.
+        if ((patternPos.length > 2) && (Math.abs(patternPos[0]) > 0.01)) {
+
+            double correctAng = patternPos[0] - leftOrRight * 1.0; // 1.0 degree to left.
+            // moving robot when there is significant difference.
+            if (Math.abs(correctAng) > 0.5 /* degree*/)
+            {
+                TurnConstraints tc = new TurnConstraints(Math.PI/3, -Math.PI/3, Math.PI/3);
+                Actions.runBlocking(
+                        drive.actionBuilder(drive.localizer.getPose())
+                                .turn(-Math.toRadians(correctAng), tc)
+                                .build()
+                );
+            }
         }
     }
 }
